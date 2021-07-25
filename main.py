@@ -25,9 +25,6 @@ def smartPricing(date):
     if date == endDate:
         travelBackwards = -1 # Iterate backwards
     elif date is not startDate:
-        marketClose = DT.datetime(year=date.year, month=date.month, day=date.day, hour=16, minute=0, second=0)
-        if date > marketClose: # Make sure we're not buying after market closes
-            date = date + DT.timedelta(1)
         date = date.date()
 
     buyPrice = data["close"].get(str(date))
@@ -54,6 +51,19 @@ def determineBuySell(date, recommendations):
     return rating
 
 
+# We want to make sure we're not trading any recommendations that take place after market hours,
+# otherwise that would lead to bias in our buying and selling.
+def fixDates(dates):
+    newDates = []
+    for date in dates:
+        marketClose = DT.datetime(year=date.year, month=date.month, day=date.day, hour=16, minute=0, second=0)
+        if date > marketClose:  # Make sure we're not buying after market closes
+            date = date + DT.timedelta(1)
+            date = DT.datetime(year=date.year, month=date.month, day=date.day, hour=9, minute=0, second=0) # Market open
+        newDates.append(date)
+    return newDates
+
+
 def tradeAllRecommendations(recommendations):
     capital = 1000
     stockCapital = 0
@@ -62,19 +72,20 @@ def tradeAllRecommendations(recommendations):
     numWins = 0
     numTrades = 0
     dates = recommendations.index
+    dates = fixDates(dates)
     recommendations = recommendations['To Grade']
     for x in range(len(recommendations)): # Can't do a for each otherwise we lose the date aspect
         recommendation = recommendations[x]
         date = dates[x]
         rating = determineBuySell(date, recommendations)
-        if rating > 0 and not bought:
+        if not bought and rating > 0:
             # print("Buying")
             buyPrice = smartPricing(date)
             numBought = int(capital/buyPrice)
             stockCapital = buyPrice * numBought
             capital = capital - stockCapital
             bought = True
-        elif rating < 0 and bought:
+        elif bought and rating < 0:
             # print("Selling")
             sellPrice = smartPricing(date)
             newStockCapital = numBought * sellPrice
